@@ -126,8 +126,8 @@ sub _update_database {
 
     my $insert_release_sth = $dbh->prepare(q[
         INSERT INTO releases
-               (path, dist, version, date, size, maturity, cpanid, distvname)
-        VALUES (?,    ?,    ?,       ?,    ?,    ?,        ?,      ?        )
+               (path, dist, version, normal_version, date, size, maturity, cpanid, distvname)
+        VALUES (?,    ?,    ?,       ?,              ?,    ?,    ?,        ?,      ?        )
     ]);
 
     my $insert_dist_sth = $dbh->prepare(q[
@@ -169,10 +169,14 @@ sub _update_database {
         my $dist = $i->dist;
         next unless $i->dist;
 
+        # make searching by version *much* easier.
+        my $normal_version = eval { version->parse($i->version)->normal };
+
         $insert_release_sth->execute(
             $path,
             $dist,
             $i->version || '',
+            $normal_version || '',
             $date,
             $size,
             $i->maturity,
@@ -247,14 +251,15 @@ CREATE TABLE IF NOT EXISTS files (
 SQL
         releases        => <<'SQL',
 CREATE TABLE IF NOT EXISTS releases (
-    path        TEXT            NOT NULL PRIMARY KEY REFERENCES files,
-    dist        TEXT            NOT NULL REFERENCES dists,
-    date        INTEGER         NOT NULL,
-    size        TEXT            NOT NULL,
-    version     TEXT            NOT NULL,
-    maturity    TEXT            NOT NULL,
-    distvname   TEXT            NOT NULL,
-    cpanid      TEXT            NOT NULL
+    path             TEXT            NOT NULL PRIMARY KEY REFERENCES files,
+    dist             TEXT            NOT NULL REFERENCES dists,
+    date             INTEGER         NOT NULL,
+    size             TEXT            NOT NULL,
+    version          TEXT            NOT NULL,
+    normal_version   TEXT            NOT NULL,
+    maturity         TEXT            NOT NULL,
+    distvname        TEXT            NOT NULL,
+    cpanid           TEXT            NOT NULL
 )
 SQL
 
@@ -393,7 +398,12 @@ sub releases {
 sub release {
     my($self, $dist, $version) = @_;
 
-    return $self->releases($dist)->single({ version => $version });
+    return $self->releases($dist)->search(
+        -or => [
+            version        => $version,
+            normal_version => $version,
+        ],
+    )->single;
 }
 
 
